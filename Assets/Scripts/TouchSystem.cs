@@ -2,8 +2,31 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 public class TouchSystem : MonoBehaviour {
+
+	public bool permissionAccel = true;
+	public bool permissionFlick = true;
+	public bool permissionSideTap = true;
+
+	[SerializeField] GameObject leftSide;
+	[SerializeField] GameObject rightSide;
+	[SerializeField] GameObject pauseMenu;
+	[SerializeField] GameObject player;
+	[SerializeField] GameObject mapCamera;
+
+	public void SetPermissionAccel(){
+		permissionAccel = GameObject.Find ("accelToggle").GetComponent<Toggle> ().isOn;
+	}
+	public void SetPermissionFlick(){
+		permissionFlick = GameObject.Find ("flickToggle").GetComponent<Toggle> ().isOn;
+	}
+	public void SetPermissionSideTap(){
+		permissionSideTap = GameObject.Find ("sideTapToggle").GetComponent<Toggle> ().isOn;
+		leftSide.SetActive (permissionSideTap);
+		rightSide.SetActive (permissionSideTap);
+	}
 
 	Vector3 cursorPos;
 	Vector3 firstPos;
@@ -12,7 +35,8 @@ public class TouchSystem : MonoBehaviour {
 	List<Vector3> tracksList = new List<Vector3>();
 	List<Vector3> accelerationList = new List<Vector3> ();
 
-	GameObject player;
+	Vector3 terminalAcc = Vector3.zero;
+
 	Player playerComponent;
 
 	double movement;
@@ -27,34 +51,37 @@ public class TouchSystem : MonoBehaviour {
 		TOUCH,
 		SWIPE,
 		SEPARATE,
+		PAUSE,
 		END
 	};
 	Mode nowMode = Mode.NOTHING;
 
 	void Start () {
-		player = GameObject.Find ("Player");
+		pauseMenu.SetActive (false);
 		playerComponent = player.GetComponent<Player> ();
-		GameObject.Find ("MapCamera").SetActive(false);
+
+		mapCamera.SetActive(false);
 
 		Application.targetFrameRate = 50;
 	}
 
 	void Update () {
-		if(nowMode != Mode.END)
+		if (nowMode != Mode.END && nowMode != Mode.PAUSE) {
 			time += Time.deltaTime;
-		//Debug.Log (1 / Time.deltaTime);
-	}
-
-	void FixedUpdate () {
-		
-		if(nowMode != Mode.END)
 			nowMode = modeCheck ();
+		}
+
+
+
+		if(permissionAccel)
+			accelerationCheck ();
 
 		switch (nowMode) {
 		case Mode.NOTHING: 	updateNothing();  break;
 		case Mode.TOUCH: 	updateTouch();    break;
 		case Mode.SWIPE: 	updateSwipe();    break;
 		case Mode.SEPARATE: updateSeparate(); break;
+		case Mode.PAUSE:    updatePause();    break;
 		case Mode.END: 		updateEnd();	  break;
 		default: Debug.Assert(false && "Illegal State!"); break;
 		}
@@ -62,6 +89,11 @@ public class TouchSystem : MonoBehaviour {
 	
 	Mode modeCheck()
 	{
+		if (Input.touchCount == 3) {
+			pauseMenu.SetActive(true);
+			return Mode.PAUSE;
+		}
+
 		if (isTouching ()) {
 			if (holdFrame == 0)	return Mode.TOUCH;
 			else				return Mode.SWIPE;
@@ -98,8 +130,8 @@ public class TouchSystem : MonoBehaviour {
 
 	void updateSeparate(){
 
-
-		swipeCheck ();
+		if(permissionFlick)
+			flickCheck ();
 
 		tapCheck ();
 
@@ -110,7 +142,18 @@ public class TouchSystem : MonoBehaviour {
 		acceleration = new Vector3(0,0,0);
 	}
 
-	void swipeCheck()
+	void accelerationCheck()
+	{
+		if (playerComponent.isActioning ())
+			return;
+		if(Input.acceleration.x >= 0.8)
+			playerComponent.RightRotate ();
+		else if(Input.acceleration.x <= -0.8)
+			playerComponent.LeftRotate ();
+
+	}
+
+	void flickCheck()
 	{
 		double averageAccel = 0;
 		if (accelerationList.Count < 3)
@@ -133,9 +176,29 @@ public class TouchSystem : MonoBehaviour {
 
 	void tapCheck()
 	{
-		if (time < firstTouchTime + 0.5 && !isMoving (acceleration)) {
-			if(!playerComponent.isActioning())
-				playerComponent.MoveFront ();
+		if (canTapAction())
+			playerComponent.MoveFront ();
+	}
+	public void tapLeftSide()
+	{
+		if (canTapAction())
+			playerComponent.LeftRotate();
+	}
+	public void tapRightSide()
+	{
+		if (canTapAction())
+			playerComponent.RightRotate();
+	}
+
+	bool canTapAction()
+	{
+		return (time < firstTouchTime + 0.5 && !isMoving (acceleration) && !playerComponent.isActioning());
+	}
+	
+	void updatePause(){
+		if (Input.touchCount == 1) {
+			nowMode = Mode.NOTHING;
+			pauseMenu.SetActive (false);
 		}
 	}
 
